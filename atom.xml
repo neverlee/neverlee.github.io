@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  
+  <title><![CDATA[The Dawn]]></title>
+  <subtitle><![CDATA[The blog of Never Lee]]></subtitle>
+  <link href="/atom.xml" rel="self"/>
+  <link href="http://neverlee.github.io//"/>
+  <updated>2015-08-04T09:28:19.828Z</updated>
+  <id>http://neverlee.github.io//</id>
+  
+  <author>
+    <name><![CDATA[Never Lee]]></name>
+    
+  </author>
+  
+  <generator uri="http://hexo.io/">Hexo</generator>
+  
+  <entry>
+    <title><![CDATA[Go编译器修改]]></title>
+    <link href="http://neverlee.github.io/post/gocompile/"/>
+    <id>http://neverlee.github.io/post/gocompile/</id>
+    <published>2015-08-04T07:32:41.000Z</published>
+    <updated>2015-08-04T09:28:19.828Z</updated>
+    <content type="html"><![CDATA[<p>Go语言将variable declared but not used和package imported but not used设计成错误，正常使用无可厚非，但调试代码时会非常恼人。下面，就通过修改go源码将这两类错误改为警告。PS：不要害怕，因为编译go编译器只需要一两分钟</p>
+<ul>
+<li><p>golang1.4及以下版本修改方式<br>  解决variable declared but not used，通过修改go/src/cmd/gc/walk.c</p>
+  <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span>(l=fn-&gt;dcl; l; l=l-&gt;next) &#123;</span><br><span class="line">    <span class="keyword">if</span>(l-&gt;n-&gt;op != ONAME || (l-&gt;n-&gt;<span class="keyword">class</span>&amp;~PHEAP) != PAUTO || l-&gt;n-&gt;sym-&gt;name[<span class="number">0</span>] == <span class="string">'&amp;'</span> || l-&gt;n-&gt;used)</span><br><span class="line">        <span class="keyword">continue</span>;</span><br><span class="line">    <span class="keyword">if</span>(l-&gt;n-&gt;defn &amp;&amp; l-&gt;n-&gt;defn-&gt;op == OTYPESW) &#123;</span><br><span class="line">        <span class="keyword">if</span>(l-&gt;n-&gt;defn-&gt;left-&gt;used)</span><br><span class="line">            <span class="keyword">continue</span>;</span><br><span class="line">        lineno = l-&gt;n-&gt;defn-&gt;left-&gt;lineno;</span><br><span class="line">        <span class="comment">//yyerror("%S declared and not used", l-&gt;n-&gt;sym);</span></span><br><span class="line">        warn(<span class="string">"[Warning] %S declared and not used"</span>, l-&gt;n-&gt;sym);</span><br><span class="line">        l-&gt;n-&gt;defn-&gt;left-&gt;used = <span class="number">1</span>; <span class="comment">// suppress repeats</span></span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        lineno = l-&gt;n-&gt;lineno;</span><br><span class="line">        <span class="comment">//修改此行为下面 yyerror("%S declared and not used", l-&gt;n-&gt;sym);</span></span><br><span class="line">        warn(<span class="string">"[Warning] %S declared and not used"</span>, l-&gt;n-&gt;sym);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>  解决package imported but not used，通过修改go/src/cmd/gc/lex.c</p>
+  <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span>(h=<span class="number">0</span>; h&lt;NHASH; h++) &#123;</span><br><span class="line">    <span class="keyword">for</span>(s = hash[h]; s != S; s = s-&gt;link) &#123;</span><br><span class="line">        <span class="keyword">if</span>(s-&gt;def == N || s-&gt;pkg != localpkg)</span><br><span class="line">            <span class="keyword">continue</span>;</span><br><span class="line">        <span class="keyword">if</span>(s-&gt;def-&gt;op == OPACK) &#123;</span><br><span class="line">            <span class="comment">// throw away top-level package name leftover</span></span><br><span class="line">            <span class="comment">// from previous file.</span></span><br><span class="line">            <span class="comment">// leave s-&gt;block set to cause redeclaration</span></span><br><span class="line">            <span class="comment">// errors if a conflicting top-level name is</span></span><br><span class="line">            <span class="comment">// introduced by a different file.</span></span><br><span class="line">            <span class="keyword">if</span>(!s-&gt;def-&gt;used &amp;&amp; !nsyntaxerrors) &#123;</span><br><span class="line">                <span class="comment">//pkgnotused(s-&gt;def-&gt;lineno, s-&gt;def-&gt;pkg-&gt;path, s-&gt;name);</span></span><br><span class="line">                lineno = s-&gt;def-&gt;lineno;</span><br><span class="line">                warn(<span class="string">"[Warning] imported and not used: \"%Z\""</span> , s-&gt;def-&gt;pkg-&gt;path);</span><br><span class="line">            &#125;</span><br><span class="line">            s-&gt;def = N;</span><br><span class="line">            <span class="keyword">continue</span>;</span><br><span class="line">        &#125;</span><br></pre></td></tr></table></figure>
+<p>  修改完后，cd到go/src下运行sudo ./make.bash，稍等，搞定！</p>
+<p>  PS：得益于go变态的编译速度，强烈建议从源码安装go。</p>
+</li>
+<li><p>golang1.5修改方法<br>  解决variable declared but not used，通过修改go/src/cmd/compile/internal/gc/walk.go中的<code>func walk(fn *Node)</code>函数</p>
+  <figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> l := fn.Func.Dcl; l != <span class="constant">nil</span>; l = l.Next &#123;</span><br><span class="line">	<span class="keyword">if</span> l.N.Op != ONAME || l.N.Class&amp;^PHEAP != PAUTO || l.N.Sym.Name[<span class="number">0</span>] == <span class="string">'&amp;'</span> || l.N.Used &#123;</span><br><span class="line">		<span class="keyword">continue</span></span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">if</span> defn := l.N.Name.Defn; defn != <span class="constant">nil</span> &amp;&amp; defn.Op == OTYPESW &#123;</span><br><span class="line">		<span class="keyword">if</span> defn.Left.Used &#123;</span><br><span class="line">			<span class="keyword">continue</span></span><br><span class="line">		&#125;</span><br><span class="line">		lineno = defn.Left.Lineno</span><br><span class="line">		<span class="comment">//修改此行为下面这行 Yyerror("%v declared and not used", l.N.Sym)</span></span><br><span class="line">		Warn(<span class="string">"%v declared and not used"</span>, l.N.Sym)</span><br><span class="line">		defn.Left.Used = <span class="constant">true</span> <span class="comment">// suppress repeats</span></span><br><span class="line">	&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">		lineno = l.N.Lineno</span><br><span class="line">		<span class="comment">//修改此行为下面这行 Yyerror("%v declared and not used", l.N.Sym)</span></span><br><span class="line">		Warn(<span class="string">"%v declared and not used"</span>, l.N.Sym)</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>  解决package imported but not used，通过修改go/src/cmd/compile/internal/gc/lex.go中的<code>func mkpackage(pkgname string)</code>函数</p>
+  <figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> _, s := <span class="keyword">range</span> localpkg.Syms &#123;</span><br><span class="line">    <span class="keyword">if</span> s.Def == <span class="constant">nil</span> &#123;</span><br><span class="line">        <span class="keyword">continue</span></span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> s.Def.Op == OPACK &#123;</span><br><span class="line">        <span class="comment">// throw away top-level package name leftover</span></span><br><span class="line">        <span class="comment">// from previous file.</span></span><br><span class="line">        <span class="comment">// leave s-&gt;block set to cause redeclaration</span></span><br><span class="line">        <span class="comment">// errors if a conflicting top-level name is</span></span><br><span class="line">        <span class="comment">// introduced by a different file.</span></span><br><span class="line">        <span class="keyword">if</span> !s.Def.Used &amp;&amp; nsyntaxerrors == <span class="number">0</span> &#123;</span><br><span class="line">            <span class="comment">//修改此行为下面两行 pkgnotused(int(s.Def.Lineno), s.Def.Name.Pkg.Path, s.Name)</span></span><br><span class="line">            lineno = s.Def.Lineno</span><br><span class="line">            Warn(<span class="string">"imported and not used: %q"</span>, s.Def.Name.Pkg.Path)</span><br><span class="line"></span><br><span class="line">        &#125;</span><br><span class="line">        s.Def = <span class="constant">nil</span></span><br><span class="line">        <span class="keyword">continue</span></span><br><span class="line">    &#125;</span><br></pre></td></tr></table></figure>
+<p>  golang1.5编译需要golang1.4，设置好GOROOT_BOOTSTRAP环境变量为golang1.4所在目录，cd到golang1.5的源码（go/src）下运行sudo ./make.bash，稍等，搞定！</p>
+</li>
+</ul>
+]]></content>
+    <summary type="html">
+    <![CDATA[将go语言的变量，包未使用错误改成警告（更新至1.5版本的go编译器）]]>
+    
+    </summary>
+    
+      <category term="Go" scheme="http://neverlee.github.io/tags/Go/"/>
+    
+      <category term="包" scheme="http://neverlee.github.io/tags/%E5%8C%85/"/>
+    
+      <category term="变量" scheme="http://neverlee.github.io/tags/%E5%8F%98%E9%87%8F/"/>
+    
+      <category term="警告" scheme="http://neverlee.github.io/tags/%E8%AD%A6%E5%91%8A/"/>
+    
+      <category term="小笔记" scheme="http://neverlee.github.io/categories/%E5%B0%8F%E7%AC%94%E8%AE%B0/"/>
+    
+  </entry>
+  
+  <entry>
+    <title><![CDATA[Hello World]]></title>
+    <link href="http://neverlee.github.io/post/hello-world/"/>
+    <id>http://neverlee.github.io/post/hello-world/</id>
+    <published>2015-06-21T03:41:27.000Z</published>
+    <updated>2015-08-04T09:16:16.981Z</updated>
+    <content type="html"><![CDATA[<h2 id="Welcome!">Welcome!</h2><p>Welcome to <a href="http://neverlee.github.io/">NeverLee</a>! This is my blog, it is base <a href="http://hexo.io/" target="_blank" rel="external">hexo</a>!, it’s theme is <a href="https://github.com/wuchong/jacman.git" target="_blank" rel="external">jacman</a>!<br>Please have a good time!</p>
+]]></content>
+    <summary type="html">
+    <![CDATA[Init my blog]]>
+    
+    </summary>
+    
+      <category term="Blog" scheme="http://neverlee.github.io/tags/Blog/"/>
+    
+      <category term="GitHub" scheme="http://neverlee.github.io/tags/GitHub/"/>
+    
+      <category term="Hexo" scheme="http://neverlee.github.io/tags/Hexo/"/>
+    
+      <category term="小杂记" scheme="http://neverlee.github.io/categories/%E5%B0%8F%E6%9D%82%E8%AE%B0/"/>
+    
+  </entry>
+  
+</feed>
