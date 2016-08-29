@@ -5,7 +5,7 @@
   <subtitle><![CDATA[The blog of Never Lee]]></subtitle>
   <link href="/atom.xml" rel="self"/>
   <link href="http://neverlee.github.io//"/>
-  <updated>2015-08-04T09:28:19.828Z</updated>
+  <updated>2016-08-29T10:56:25.198Z</updated>
   <id>http://neverlee.github.io//</id>
   
   <author>
@@ -16,30 +16,321 @@
   <generator uri="http://hexo.io/">Hexo</generator>
   
   <entry>
+    <title><![CDATA[golang锁竞争性能]]></title>
+    <link href="http://neverlee.github.io/post/golang-mutex/"/>
+    <id>http://neverlee.github.io/post/golang-mutex/</id>
+    <published>2016-08-29T09:54:21.000Z</published>
+    <updated>2016-08-29T10:56:25.198Z</updated>
+    <content type="html"><![CDATA[<p>闲来没事，便试着测试了下golang的锁的性能。代码如下：<br><figure class="highlight golang"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">package</span> main</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> (</span><br><span class="line">	<span class="string">"fmt"</span></span><br><span class="line">	<span class="string">"os"</span></span><br><span class="line">	<span class="string">"strconv"</span></span><br><span class="line">	<span class="string">"sync"</span></span><br><span class="line">	<span class="string">"time"</span></span><br><span class="line">)</span><br><span class="line"></span><br><span class="line"><span class="keyword">var</span> lock sync.Mutex</span><br><span class="line"><span class="keyword">var</span> count = <span class="number">1</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">func</span> work() &#123;</span><br><span class="line">	<span class="keyword">for</span> &#123;</span><br><span class="line">		lock.Lock()</span><br><span class="line">		count++</span><br><span class="line">		lock.Unlock()</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">func</span> main() &#123;</span><br><span class="line">	nthread := <span class="number">1</span></span><br><span class="line">	<span class="keyword">if</span> <span class="built_in">len</span>(os.Args) &gt; <span class="number">1</span> &#123;</span><br><span class="line">		nthread, _ = strconv.Atoi(os.Args[<span class="number">1</span>])</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">for</span> i := <span class="number">0</span>; i &lt; nthread; i++ &#123;</span><br><span class="line">		<span class="keyword">go</span> work()</span><br><span class="line">	&#125;</span><br><span class="line">	old := <span class="number">0</span></span><br><span class="line">	last := time.Now()</span><br><span class="line">	<span class="keyword">for</span> &#123;</span><br><span class="line">		time.Sleep(time.Second)</span><br><span class="line">		lock.Lock()</span><br><span class="line">		k := count</span><br><span class="line">		lock.Unlock()</span><br><span class="line">		now := time.Now()</span><br><span class="line">		fmt.Println(<span class="typename">int</span>(<span class="typename">float64</span>(k-old) / (<span class="typename">float64</span>(now.UnixNano()-last.UnixNano()) / <span class="number">1e9</span>)))</span><br><span class="line">		old = k</span><br><span class="line">		last = now</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>测试结果：</p>
+<table>
+<thead>
+<tr>
+<th>竞争的协程数</th>
+<th>每秒总的lock次数 </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>5千万            </td>
+</tr>
+<tr>
+<td>2</td>
+<td>2.8千万          </td>
+</tr>
+<tr>
+<td>4</td>
+<td>9百万            </td>
+</tr>
+<tr>
+<td>10</td>
+<td>6百万            </td>
+</tr>
+<tr>
+<td>100</td>
+<td>5百万            </td>
+</tr>
+<tr>
+<td>1000</td>
+<td>5百万            </td>
+</tr>
+<tr>
+<td>10000</td>
+<td>5百万            </td>
+</tr>
+<tr>
+<td>100000</td>
+<td>5百万            </td>
+</tr>
+<tr>
+<td>1000000</td>
+<td>5百万            </td>
+</tr>
+</tbody>
+</table>
+]]></content>
+    <summary type="html">
+    <![CDATA[测试golang锁的性能]]>
+    
+    </summary>
+    
+      <category term="Go" scheme="http://neverlee.github.io/tags/Go/"/>
+    
+      <category term="锁" scheme="http://neverlee.github.io/tags/%E9%94%81/"/>
+    
+      <category term="小笔记" scheme="http://neverlee.github.io/categories/%E5%B0%8F%E7%AC%94%E8%AE%B0/"/>
+    
+  </entry>
+  
+  <entry>
+    <title><![CDATA[Golang1.6的cgo指针注意事项]]></title>
+    <link href="http://neverlee.github.io/post/go16-pointer/"/>
+    <id>http://neverlee.github.io/post/go16-pointer/</id>
+    <published>2016-04-05T11:01:07.000Z</published>
+    <updated>2016-04-05T11:37:34.000Z</updated>
+    <content type="html"><![CDATA[<p>例如下面的代码<br><figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">package</span> main</span><br><span class="line"></span><br><span class="line"><span class="comment">/*</span><br><span class="line">#include &lt;stdio.h&gt;</span><br><span class="line">void hello(char **happy) &#123;</span><br><span class="line">	puts(*happy);</span><br><span class="line">&#125;</span><br><span class="line">*/</span></span><br><span class="line"><span class="keyword">import</span> <span class="string">"C"</span></span><br><span class="line"><span class="keyword">import</span> (</span><br><span class="line">	<span class="string">"unsafe"</span></span><br><span class="line">)</span><br><span class="line"></span><br><span class="line"><span class="keyword">func</span> main() &#123;</span><br><span class="line">	inbuf := []<span class="typename">byte</span>(<span class="string">"hello kitty\x00"</span>)</span><br><span class="line">	inptr := unsafe.Pointer(&amp;inbuf[<span class="number">0</span>])</span><br><span class="line">	C.hello((**C.char)(unsafe.Pointer(&amp;inptr)))</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>它在golang1.6以前的版本（比如1.5.3等）能正常运行。但在golang1.6时运行却会出一个这样的异常：<br><figure class="highlight"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$ go run main.go&#10;panic: runtime error: cgo argument has Go pointer to Go pointer&#10;&#10;goroutine 1 [running]:&#10;panic(0x469600, 0xc82000a1c0)&#10;        /usr/local/go/src/runtime/panic.go:464 +0x3e6&#10;main.main()&#10;        /home/listarme/work/main.go:17 +0xbe&#10;exit status 2</span><br></pre></td></tr></table></figure></p>
+<p>原因是golang1.6中修改了对指针的运行时检查，若要正常使用多重指针，则必须得借助uintptr，如下<br><figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">package</span> main</span><br><span class="line"></span><br><span class="line"><span class="comment">/*</span><br><span class="line">#include &lt;stdio.h&gt;</span><br><span class="line">void hello(char **happy) &#123;</span><br><span class="line">	puts(*happy);</span><br><span class="line">&#125;</span><br><span class="line">*/</span></span><br><span class="line"><span class="keyword">import</span> <span class="string">"C"</span></span><br><span class="line"><span class="keyword">import</span> (</span><br><span class="line">	<span class="string">"unsafe"</span></span><br><span class="line">)</span><br><span class="line"></span><br><span class="line"><span class="keyword">func</span> main() &#123;</span><br><span class="line">	inbuf := []<span class="typename">byte</span>(<span class="string">"hello kitty\x00"</span>)</span><br><span class="line">	inptr := <span class="typename">uintptr</span>(unsafe.Pointer(&amp;inbuf[<span class="number">0</span>]))</span><br><span class="line">	C.hello((**C.char)(unsafe.Pointer(&amp;inptr)))</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<blockquote>
+<p>作者原创，转载请注明出处</p>
+</blockquote>
+]]></content>
+    <summary type="html">
+    <![CDATA[golang1.6在使用cgo时对指针的一个运行时检测的坑]]>
+    
+    </summary>
+    
+      <category term="1.6" scheme="http://neverlee.github.io/tags/1-6/"/>
+    
+      <category term="cgo" scheme="http://neverlee.github.io/tags/cgo/"/>
+    
+      <category term="golang" scheme="http://neverlee.github.io/tags/golang/"/>
+    
+      <category term="指针" scheme="http://neverlee.github.io/tags/%E6%8C%87%E9%92%88/"/>
+    
+      <category term="小笔记" scheme="http://neverlee.github.io/categories/%E5%B0%8F%E7%AC%94%E8%AE%B0/"/>
+    
+  </entry>
+  
+  <entry>
+    <title><![CDATA[Nginx简单https配置]]></title>
+    <link href="http://neverlee.github.io/post/nginx-https/"/>
+    <id>http://neverlee.github.io/post/nginx-https/</id>
+    <published>2016-04-05T07:03:09.000Z</published>
+    <updated>2016-04-05T11:19:14.000Z</updated>
+    <content type="html"><![CDATA[<p>平常测试部署中，免不了要使用https。简单地部署出一个https站点可以这样来。</p>
+<p>首先生成证书<br><figure class="highlight"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">openssl genrsa -out server.pem 2048&#10;&#10;openssl req -new -x509 -key server.pem -out cacert.pem -days 1095&#10;# &#24403;&#20986;&#29616; Common Name (e.g. server FQDN or YOUR name) []:&#10;# &#36755;&#20837;&#20320;&#35201;&#37096;&#32626;&#32593;&#31449;&#30340;hostname&#65292;&#20363;&#22914;&#36825;&#37324;&#20351;&#29992;example.com</span><br></pre></td></tr></table></figure></p>
+<p>之后便可以在nginx中配置使用<br><figure class="highlight"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">server &#123;&#10;    listen       443;&#10;    server_name  example.com;&#10;    ssl on;&#10;    ssl_certificate keyfile/cacert.pem;&#10;    ssl_certificate_key keyfile/server.pem;&#10;&#125;</span><br></pre></td></tr></table></figure></p>
+<p>当然，如果想自己给证书签名，可以这样<br><figure class="highlight"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">openssl genrsa -out server.pem 2048&#10;openssl req -new -x509 -key server.pem -out cacert.pem -days 1095&#10;# &#24403;&#20986;&#29616; Common Name (e.g. server FQDN or YOUR name) []:&#10;# &#36755;&#20837;&#20320;&#35201;&#37096;&#32626;&#32593;&#31449;&#30340;hostname&#65292;&#20363;&#22914;&#36825;&#37324;&#20351;&#29992;example.com&#10;&#10;openssl genrsa -des3 -out server.key 1024&#10;openssl req -new -key server.key -out server.csr&#10;&#10;openssl rsa -in server.key -out server_nopw.key&#10;# &#22312;&#21152;&#36733;SSL&#25903;&#25345;&#30340;Nginx&#24182;&#20351;&#29992;&#19978;&#36848;&#31169;&#38053;&#26102;&#38500;&#21435;&#24517;&#39035;&#30340;&#21475;&#20196;&#10;openssl x509 -req -days 365 -in server.csr -signkey server.key -out server.crt</span><br></pre></td></tr></table></figure></p>
+<p>最后可在nginx配置<br><figure class="highlight"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">server &#123;&#10;    server_name exmaple.com;&#10;    listen 443;&#10;    ssl on;&#10;    ssl_certificate keydir/server.crt;&#10;    ssl_certificate_key keydir/server.key;&#10;&#125;</span><br></pre></td></tr></table></figure></p>
+]]></content>
+    <summary type="html">
+    <![CDATA[Nginx的简单https配置，用于测试]]>
+    
+    </summary>
+    
+      <category term="https" scheme="http://neverlee.github.io/tags/https/"/>
+    
+      <category term="nginx" scheme="http://neverlee.github.io/tags/nginx/"/>
+    
+      <category term="ssl" scheme="http://neverlee.github.io/tags/ssl/"/>
+    
+      <category term="小笔记" scheme="http://neverlee.github.io/categories/%E5%B0%8F%E7%AC%94%E8%AE%B0/"/>
+    
+  </entry>
+  
+  <entry>
+    <title><![CDATA[android执行su命令]]></title>
+    <link href="http://neverlee.github.io/post/android-su/"/>
+    <id>http://neverlee.github.io/post/android-su/</id>
+    <published>2016-04-03T10:59:34.000Z</published>
+    <updated>2016-04-05T07:02:52.000Z</updated>
+    <content type="html"><![CDATA[<p>Root过后的Android使用su执行命令的java代码。</p>
+<h2 id="修改包目录权限">修改包目录权限</h2><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">boolean</span> <span class="title">upgradeRootPermission</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    Process process = <span class="keyword">null</span>;</span><br><span class="line">    DataOutputStream os = <span class="keyword">null</span>;</span><br><span class="line">    String cmd=<span class="string">"chmod 777 "</span> + getPackageCodePath();</span><br><span class="line">    <span class="keyword">try</span> &#123;</span><br><span class="line">        process = Runtime.getRuntime().exec(<span class="string">"su"</span>); <span class="comment">//切换到root帐号</span></span><br><span class="line">        os = <span class="keyword">new</span> DataOutputStream(process.getOutputStream());</span><br><span class="line">        os.writeBytes(cmd + <span class="string">"\n"</span>);</span><br><span class="line">        os.writeBytes(<span class="string">"exit\n"</span>);</span><br><span class="line">        os.flush();</span><br><span class="line">        process.waitFor();</span><br><span class="line">    &#125; <span class="keyword">catch</span> (Exception e) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="keyword">false</span>;</span><br><span class="line">    &#125; <span class="keyword">finally</span> &#123;</span><br><span class="line">        <span class="keyword">try</span> &#123;</span><br><span class="line">            <span class="keyword">if</span> (os != <span class="keyword">null</span>) &#123;</span><br><span class="line">                os.close();</span><br><span class="line">            &#125;</span><br><span class="line">            process.destroy();</span><br><span class="line">        &#125; <span class="keyword">catch</span> (Exception e) &#123;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="keyword">true</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h2 id="以root权限执行并获取输出">以root权限执行并获取输出</h2><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> String <span class="title">execRootCmd</span><span class="params">(String cmd)</span> </span>&#123;</span><br><span class="line">    DataInputStream is = <span class="keyword">null</span>;</span><br><span class="line">    DataOutputStream os = <span class="keyword">null</span>;</span><br><span class="line">    String content = <span class="string">""</span>;</span><br><span class="line">    <span class="keyword">try</span> &#123;</span><br><span class="line">        Process process = Runtime.getRuntime().exec(<span class="string">"su"</span>);</span><br><span class="line">        os = <span class="keyword">new</span> DataOutputStream(process.getOutputStream());</span><br><span class="line">        is = <span class="keyword">new</span> DataInputStream(process.getInputStream());</span><br><span class="line">        os.writeBytes(cmd + <span class="string">"\nexit\n"</span>);</span><br><span class="line">        os.flush();</span><br><span class="line">        <span class="keyword">while</span> (<span class="keyword">true</span>) &#123;</span><br><span class="line">            String line = is.readLine();</span><br><span class="line">            <span class="keyword">if</span> (line == <span class="keyword">null</span>) &#123;</span><br><span class="line">                <span class="keyword">break</span>;</span><br><span class="line">            &#125;</span><br><span class="line">            content += line + <span class="string">"\n"</span>;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="comment">//process.waitFor();</span></span><br><span class="line">        <span class="comment">//return process.exitValue();</span></span><br><span class="line">        <span class="keyword">return</span> content;</span><br><span class="line">    &#125; <span class="keyword">catch</span> (Exception e) &#123;</span><br><span class="line">        e.printStackTrace();</span><br><span class="line">    &#125; <span class="keyword">finally</span> &#123;</span><br><span class="line">        <span class="keyword">try</span> &#123;</span><br><span class="line">            <span class="keyword">if</span> (is != <span class="keyword">null</span>) &#123;</span><br><span class="line">                is.close();</span><br><span class="line">            &#125;</span><br><span class="line">            <span class="keyword">if</span> (os != <span class="keyword">null</span>) &#123;</span><br><span class="line">                os.close();</span><br><span class="line">            &#125;</span><br><span class="line">            process.destroy();</span><br><span class="line">        &#125; <span class="keyword">catch</span> (Exception e) &#123;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="string">""</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<blockquote>
+<p>作者原创，转载请注明出处</p>
+</blockquote>
+]]></content>
+    <summary type="html">
+    <![CDATA[android使用su运行带root权限的命令]]>
+    
+    </summary>
+    
+      <category term="android" scheme="http://neverlee.github.io/tags/android/"/>
+    
+      <category term="root" scheme="http://neverlee.github.io/tags/root/"/>
+    
+      <category term="su" scheme="http://neverlee.github.io/tags/su/"/>
+    
+      <category term="小笔记" scheme="http://neverlee.github.io/categories/%E5%B0%8F%E7%AC%94%E8%AE%B0/"/>
+    
+  </entry>
+  
+  <entry>
+    <title><![CDATA[Nginx request body filter]]></title>
+    <link href="http://neverlee.github.io/post/ngx-reqbody-filter/"/>
+    <id>http://neverlee.github.io/post/ngx-reqbody-filter/</id>
+    <published>2016-03-09T10:53:09.000Z</published>
+    <updated>2016-03-22T06:07:52.000Z</updated>
+    <content type="html"><![CDATA[<p>Nginx中如果需要处理请求体，之后交由其他模块处理，常用的方式有三种：</p>
+<ol>
+<li>用一个content除非的handle模块接收处理请求体，处理完成后内部跳转给其他location。比如nginx-upload-module就是采用这种方法。</li>
+<li>注册一个rewrite阶段的handle模块接收处理请求体。之后按原nginx模块流程。比如form-input-nginx-module和ngx_json_post_module就是采用这模式</li>
+<li>注册一个nginx request body filter，使用类似response body filter的方式进行处理。</li>
+</ol>
+<p>当然这三种方法的适用场景并不相同。这里主要介绍方法3，适用于流式处理请求body数据。</p>
+<p>首先，可以用类似注册response filter的方式在模块的postconfigure方法中注册request body filter<br><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">static</span> ngx_http_request_body_filter_pt  ngx_http_next_request_body_filter;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">static</span> ngx_int_t <span class="title">ngx_http_example_post_conf</span><span class="params">(ngx_conf_t *cf)</span></span><br><span class="line"></span>&#123;</span><br><span class="line">    <span class="comment">// register input filter</span></span><br><span class="line">    ngx_http_next_request_body_filter = <span class="keyword">ngx_http_t</span>op_request_body_filter;</span><br><span class="line">    <span class="keyword">ngx_http_t</span>op_request_body_filter = ngx_http_example_request_body_filter;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> NGX_OK;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>之后像编写response body filter一样完成request body filter方法就可以了。当然，这里需要注意的是，如果经过这个filter处理之后改变了原本请求的body的长度，记得一定要在最后修正头部的content length，以免让之后的模块或upstream拿到错误的content length。<br><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">static</span> ngx_int_t</span><br><span class="line"><span class="title">ngx_http_example_request_body_filter</span><span class="params">(ngx_http_request_t *r, ngx_chain_t *in)</span></span><br><span class="line"></span>&#123;</span><br><span class="line">    <span class="comment">// ...</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (<span class="keyword">last_buf_in_t</span>his_filter) &#123;</span><br><span class="line">        r-&gt;headers_in.content_length_n = cry-&gt;total_len;</span><br><span class="line">        r-&gt;headers_in.content_length-&gt;value.data = ngx_palloc(r-&gt;pool, NGX_OFF_T_LEN);</span><br><span class="line">        <span class="keyword">if</span> (r-&gt;headers_in.content_length-&gt;value.data == NULL) &#123;</span><br><span class="line">            <span class="keyword">return</span> NGX_HTTP_INTERNAL_SERVER_ERROR;</span><br><span class="line">        &#125;</span><br><span class="line">        r-&gt;headers_in.content_length-&gt;value.len =</span><br><span class="line">            ngx_sprintf(r-&gt;headers_in.content_length-&gt;value.data, <span class="string">"%O"</span>, r-&gt;headers_in.content_length_n)</span><br><span class="line">            - r-&gt;headers_in.content_length-&gt;value.data;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> ngx_http_next_request_body_filter(r, in);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>而正常情况（在没有第三模块注册request body filter时），该request body filter的执行顺序是在ngx_http_request_body_length_filter或ngx_http_request_body_chunked_filter之后执行，在这里处理数据不用担心chunked编码的问题，而对应的ngx_http_next_request_body_filter（也就是注册模块前的ngx_http_top_request_body_filter）正好是ngx_http_request_body_save_filter。当然，要注意的，request body filter只有在真正接收请求body时才会被执行，比如在handle里请求接收数据，或者向后端upstream转发请求body时。</p>
+<blockquote>
+<p>作者原创，转载请注明出处</p>
+</blockquote>
+]]></content>
+    <summary type="html">
+    <![CDATA[Nginx的request body filter介绍]]>
+    
+    </summary>
+    
+      <category term="filter" scheme="http://neverlee.github.io/tags/filter/"/>
+    
+      <category term="nginx" scheme="http://neverlee.github.io/tags/nginx/"/>
+    
+      <category term="模块" scheme="http://neverlee.github.io/tags/%E6%A8%A1%E5%9D%97/"/>
+    
+      <category term="小笔记" scheme="http://neverlee.github.io/categories/%E5%B0%8F%E7%AC%94%E8%AE%B0/"/>
+    
+  </entry>
+  
+  <entry>
+    <title><![CDATA[k近邻算法(kNN)]]></title>
+    <link href="http://neverlee.github.io/post/kNN/"/>
+    <id>http://neverlee.github.io/post/kNN/</id>
+    <published>2016-03-08T15:09:53.000Z</published>
+    <updated>2016-03-22T06:07:52.000Z</updated>
+    <content type="html"><![CDATA[<p>K近邻算法是一个监督学习的非常简单的分类算法。可以说不需要训练模型，或者说整理好的数据就是分类模型。</p>
+<p>算法思路简单，通过计算当前待分类项与所有已知项的距离，取距离最小的K项中频率最高的类别为此项分类结果。当然，这里的距离是广义的距离，可以是空间中的欧氏距离，也可以是任意自定义的函数算出的距离。</p>
+<ul>
+<li>优点：精度高，对异常数据不敏感，可在线更新</li>
+<li>缺点：时空复杂度高</li>
+<li>适用数据：数值型或标量型</li>
+</ul>
+<blockquote>
+<p>作者原创，转载请注明出处</p>
+</blockquote>
+]]></content>
+    <summary type="html">
+    <![CDATA[通过不同测量特征的距离的分类算法]]>
+    
+    </summary>
+    
+      <category term="kNN" scheme="http://neverlee.github.io/tags/kNN/"/>
+    
+      <category term="k近邻" scheme="http://neverlee.github.io/tags/k%E8%BF%91%E9%82%BB/"/>
+    
+      <category term="分类" scheme="http://neverlee.github.io/tags/%E5%88%86%E7%B1%BB/"/>
+    
+      <category term="机器学习" scheme="http://neverlee.github.io/tags/%E6%9C%BA%E5%99%A8%E5%AD%A6%E4%B9%A0/"/>
+    
+      <category term="小笔记" scheme="http://neverlee.github.io/categories/%E5%B0%8F%E7%AC%94%E8%AE%B0/"/>
+    
+  </entry>
+  
+  <entry>
+    <title><![CDATA[技能传送门]]></title>
+    <link href="http://neverlee.github.io/post/record-url/"/>
+    <id>http://neverlee.github.io/post/record-url/</id>
+    <published>2016-03-05T10:48:52.000Z</published>
+    <updated>2016-03-25T02:52:35.000Z</updated>
+    <content type="html"><![CDATA[<p><a href="http://huifeng.me/2015/08/23/ProxyChains-NG-4-OSX-Setting/" target="_blank" rel="external">Mac OSX系统下通过ProxyChains-NG实现终端下的代理</a></p>
+<p><a href="http://blog.ralch.com/tutorial/golang-sharing-libraries/" target="_blank" rel="external">Sharing Golang packages to C and Go</a></p>
+<p><a href="http://liam0205.me/2014/09/11/matplotlib-tutorial-zh-cn/" target="_blank" rel="external">matplotlib</a></p>
+]]></content>
+    <summary type="html">
+    <![CDATA[<p><a href="http://huifeng.me/2015/08/23/ProxyChains-NG-4-OSX-Setting/" target="_blank" rel="external">Mac OSX系统下通过ProxyChains-NG实现终端下的代理</a]]>
+    </summary>
+    
+      <category term="必备技能" scheme="http://neverlee.github.io/tags/%E5%BF%85%E5%A4%87%E6%8A%80%E8%83%BD/"/>
+    
+      <category term="小笔记" scheme="http://neverlee.github.io/categories/%E5%B0%8F%E7%AC%94%E8%AE%B0/"/>
+    
+  </entry>
+  
+  <entry>
+    <title><![CDATA[Mac、Win下，挂载任意目录至docker容器中]]></title>
+    <link href="http://neverlee.github.io/post/docker-mount/"/>
+    <id>http://neverlee.github.io/post/docker-mount/</id>
+    <published>2015-10-25T12:00:47.000Z</published>
+    <updated>2016-03-22T06:07:52.000Z</updated>
+    <content type="html"><![CDATA[<p>使用<code>docker run</code>启动容器时，可以使用<code>-v</code>参数将本机文件系统的目录挂载进容器中，例如：<br><figure class="highlight"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">docker run -i -t -v ~/build:/root/build --name test ubuntu</span><br></pre></td></tr></table></figure></p>
+<p>但在Windows(Mac)下，却被限制只能挂载C:\Users(/Users)下的目录，可参看<a href="http://docs.docker.com/userguide/dockervolumes/" target="_blank" rel="external">官网文档</a>。</p>
+<p>这对于Windows上和Mac外接硬盘放code的coder来说自然是难以忍受的事。Google下看到甚至有人在Mac上利用sshfs这种特别绕的方式来将本地文件系统挂载进去。笔者在研究后发现，实际上Docker是支持挂载其他地方的目录进容器的。远不用sshfs那么麻烦。</p>
+<hr>
+<p>原理（以Mac为例，Win同理）：</p>
+<p><code>boot2docker up</code>启动docker后，使用<code>boo2docker ssh ls /</code>后就会发现，<br>在这里面有一个Users目录，同本机上/Users的内容是一样的，没有错，<br>这个就是virtualbox的共享文件夹，打开virtualbox，<br>查看boot2docker的设置就可以看到，Users对应的正好是本机/Users。Linux下，<br><code>docker run</code>的<code>-v</code>是将本机目录挂载进容器中，而在Mac的boot2docker中，<br>也是一样的，它挂载的是virtualbox这个虚拟机（一般名字是boot2docker，<br>也是linux）的文件系统的目录。docker这个虚拟机里的文件系统挂载进容器中。<br>我们之所以能成功挂载Users及其子目录进容器，则是因为通过virtualbox的共享文件夹功能将本地目录映射到这个虚拟机中了。所以，<code>-v ~/build:/root/build</code>冒号左边的目录是boot2docker这个虚拟机文件系统里的目录（而不是本机），我们之所以，能写本地/Users下的目录，只是因为本地的/Users跟boot2docker中的/Users结构是完全一样的（映射）。</p>
+<p>所以，我们就可以修改共享文件夹及<code>-v</code>参数左边的内容来实现挂载除/Users外的目录。比如我们要挂载本机的/Volumes/hello到容器的/root/hello上。</p>
+<p>首先打开virtualbox，修改虚拟机boot2docker的设置，将共享文件夹Users指定的目录/Users改成/，保持共享文件夹Users不变。</p>
+<blockquote>
+<p>当然，之前尝试过在virtualbox中增加其他的共享文件夹，但启动boot2docker后并不会生效。</p>
+</blockquote>
+<p>之后，<code>boot2docker up</code>，这时，你再用<code>boot2docker ssh ls /Users/</code>查看时，<br>这里面的内容已经不在是本机/Users了，而是本机的/了。<br>所以，本机的/Volumes/hello对应的就是虚拟机中的/Users/Volumes/hello了。就可以这样挂载了。<br><figure class="highlight"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">docker run -i -t -v /Users/Volumes/hello:/root/hello --name test ubuntu</span><br></pre></td></tr></table></figure></p>
+<p>这样只要本机目录名前加上/Users，都能挂载进容器中了。</p>
+<hr>
+<p>后记：</p>
+<p>不过，惟一的不足是，这样用起来有点别扭，尤其是依赖shell补全目录名时。尝试建软链接，<code>boot2docker ssh sudo ln -s /Users/Volumes /Volumes</code>。之后就可以使用<br><figure class="highlight"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">docker run -i -t -v /Volumes/hello:/root/hello --name test ubuntu</span><br></pre></td></tr></table></figure></p>
+<p>来挂载，但重启boot2docker后软链接又没了，要解决这个，要自己制作boot2docker的镜像了。另外boot2docker up有一个参数可以设置共享文件夹，准备之后研究下，或许这个能更好地解决这个问题。</p>
+<blockquote>
+<p>作者原创，转载请注明出处</p>
+</blockquote>
+]]></content>
+    <summary type="html">
+    <![CDATA[Mac、Win下，`docker run`的`-v`参数挂载非Users目录之外的目录进Docker容器]]>
+    
+    </summary>
+    
+      <category term="Mac" scheme="http://neverlee.github.io/tags/Mac/"/>
+    
+      <category term="Windows" scheme="http://neverlee.github.io/tags/Windows/"/>
+    
+      <category term="docker" scheme="http://neverlee.github.io/tags/docker/"/>
+    
+      <category term="挂载" scheme="http://neverlee.github.io/tags/%E6%8C%82%E8%BD%BD/"/>
+    
+      <category term="文件系统" scheme="http://neverlee.github.io/tags/%E6%96%87%E4%BB%B6%E7%B3%BB%E7%BB%9F/"/>
+    
+      <category term="小笔记" scheme="http://neverlee.github.io/categories/%E5%B0%8F%E7%AC%94%E8%AE%B0/"/>
+    
+  </entry>
+  
+  <entry>
     <title><![CDATA[Go编译器修改]]></title>
     <link href="http://neverlee.github.io/post/gocompile/"/>
     <id>http://neverlee.github.io/post/gocompile/</id>
     <published>2015-08-04T07:32:41.000Z</published>
-    <updated>2015-08-04T09:28:19.828Z</updated>
+    <updated>2016-03-22T06:07:52.000Z</updated>
     <content type="html"><![CDATA[<p>Go语言将variable declared but not used和package imported but not used设计成错误，正常使用无可厚非，但调试代码时会非常恼人。下面，就通过修改go源码将这两类错误改为警告。PS：不要害怕，因为编译go编译器只需要一两分钟</p>
 <ul>
 <li><p>golang1.4及以下版本修改方式<br>  解决variable declared but not used，通过修改go/src/cmd/gc/walk.c</p>
-  <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span>(l=fn-&gt;dcl; l; l=l-&gt;next) &#123;</span><br><span class="line">    <span class="keyword">if</span>(l-&gt;n-&gt;op != ONAME || (l-&gt;n-&gt;<span class="keyword">class</span>&amp;~PHEAP) != PAUTO || l-&gt;n-&gt;sym-&gt;name[<span class="number">0</span>] == <span class="string">'&amp;'</span> || l-&gt;n-&gt;used)</span><br><span class="line">        <span class="keyword">continue</span>;</span><br><span class="line">    <span class="keyword">if</span>(l-&gt;n-&gt;defn &amp;&amp; l-&gt;n-&gt;defn-&gt;op == OTYPESW) &#123;</span><br><span class="line">        <span class="keyword">if</span>(l-&gt;n-&gt;defn-&gt;left-&gt;used)</span><br><span class="line">            <span class="keyword">continue</span>;</span><br><span class="line">        lineno = l-&gt;n-&gt;defn-&gt;left-&gt;lineno;</span><br><span class="line">        <span class="comment">//yyerror("%S declared and not used", l-&gt;n-&gt;sym);</span></span><br><span class="line">        warn(<span class="string">"[Warning] %S declared and not used"</span>, l-&gt;n-&gt;sym);</span><br><span class="line">        l-&gt;n-&gt;defn-&gt;left-&gt;used = <span class="number">1</span>; <span class="comment">// suppress repeats</span></span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        lineno = l-&gt;n-&gt;lineno;</span><br><span class="line">        <span class="comment">//修改此行为下面 yyerror("%S declared and not used", l-&gt;n-&gt;sym);</span></span><br><span class="line">        warn(<span class="string">"[Warning] %S declared and not used"</span>, l-&gt;n-&gt;sym);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+  <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span>(l=fn-&gt;dcl; l; l=l-&gt;next) &#123;</span><br><span class="line">    <span class="keyword">if</span>(l-&gt;n-&gt;op != ONAME || (l-&gt;n-&gt;<span class="keyword">class</span>&amp;~PHEAP) != PAUTO || l-&gt;n-&gt;sym-&gt;name[<span class="number">0</span>] == <span class="string">'&amp;'</span> || l-&gt;n-&gt;used)</span><br><span class="line">        <span class="keyword">continue</span>;</span><br><span class="line">    <span class="keyword">if</span>(l-&gt;n-&gt;defn &amp;&amp; l-&gt;n-&gt;defn-&gt;op == OTYPESW) &#123;</span><br><span class="line">        <span class="keyword">if</span>(l-&gt;n-&gt;defn-&gt;left-&gt;used)</span><br><span class="line">            <span class="keyword">continue</span>;</span><br><span class="line">        lineno = l-&gt;n-&gt;defn-&gt;left-&gt;lineno;</span><br><span class="line">        <span class="comment">//修改此行为下一行 yyerror("%S declared and not used", l-&gt;n-&gt;sym);</span></span><br><span class="line">        warn(<span class="string">"[Warning] %S declared and not used"</span>, l-&gt;n-&gt;sym);</span><br><span class="line">        l-&gt;n-&gt;defn-&gt;left-&gt;used = <span class="number">1</span>; <span class="comment">// suppress repeats</span></span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        lineno = l-&gt;n-&gt;lineno;</span><br><span class="line">        <span class="comment">//修改此行为下一行 yyerror("%S declared and not used", l-&gt;n-&gt;sym);</span></span><br><span class="line">        warn(<span class="string">"[Warning] %S declared and not used"</span>, l-&gt;n-&gt;sym);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 <p>  解决package imported but not used，通过修改go/src/cmd/gc/lex.c</p>
-  <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span>(h=<span class="number">0</span>; h&lt;NHASH; h++) &#123;</span><br><span class="line">    <span class="keyword">for</span>(s = hash[h]; s != S; s = s-&gt;link) &#123;</span><br><span class="line">        <span class="keyword">if</span>(s-&gt;def == N || s-&gt;pkg != localpkg)</span><br><span class="line">            <span class="keyword">continue</span>;</span><br><span class="line">        <span class="keyword">if</span>(s-&gt;def-&gt;op == OPACK) &#123;</span><br><span class="line">            <span class="comment">// throw away top-level package name leftover</span></span><br><span class="line">            <span class="comment">// from previous file.</span></span><br><span class="line">            <span class="comment">// leave s-&gt;block set to cause redeclaration</span></span><br><span class="line">            <span class="comment">// errors if a conflicting top-level name is</span></span><br><span class="line">            <span class="comment">// introduced by a different file.</span></span><br><span class="line">            <span class="keyword">if</span>(!s-&gt;def-&gt;used &amp;&amp; !nsyntaxerrors) &#123;</span><br><span class="line">                <span class="comment">//pkgnotused(s-&gt;def-&gt;lineno, s-&gt;def-&gt;pkg-&gt;path, s-&gt;name);</span></span><br><span class="line">                lineno = s-&gt;def-&gt;lineno;</span><br><span class="line">                warn(<span class="string">"[Warning] imported and not used: \"%Z\""</span> , s-&gt;def-&gt;pkg-&gt;path);</span><br><span class="line">            &#125;</span><br><span class="line">            s-&gt;def = N;</span><br><span class="line">            <span class="keyword">continue</span>;</span><br><span class="line">        &#125;</span><br></pre></td></tr></table></figure>
+  <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span>(h=<span class="number">0</span>; h&lt;NHASH; h++) &#123;</span><br><span class="line">    <span class="keyword">for</span>(s = hash[h]; s != S; s = s-&gt;link) &#123;</span><br><span class="line">        <span class="keyword">if</span>(s-&gt;def == N || s-&gt;pkg != localpkg)</span><br><span class="line">            <span class="keyword">continue</span>;</span><br><span class="line">        <span class="keyword">if</span>(s-&gt;def-&gt;op == OPACK) &#123;</span><br><span class="line">            <span class="comment">// throw away top-level package name leftover</span></span><br><span class="line">            <span class="comment">// from previous file.</span></span><br><span class="line">            <span class="comment">// leave s-&gt;block set to cause redeclaration</span></span><br><span class="line">            <span class="comment">// errors if a conflicting top-level name is</span></span><br><span class="line">            <span class="comment">// introduced by a different file.</span></span><br><span class="line">            <span class="keyword">if</span>(!s-&gt;def-&gt;used &amp;&amp; !nsyntaxerrors) &#123;</span><br><span class="line">                <span class="comment">//修改此行为下面两行 pkgnotused(s-&gt;def-&gt;lineno, s-&gt;def-&gt;pkg-&gt;path, s-&gt;name);</span></span><br><span class="line">                lineno = s-&gt;def-&gt;lineno;</span><br><span class="line">                warn(<span class="string">"[Warning] imported and not used: \"%Z\""</span> , s-&gt;def-&gt;pkg-&gt;path);</span><br><span class="line">            &#125;</span><br><span class="line">            s-&gt;def = N;</span><br><span class="line">            <span class="keyword">continue</span>;</span><br><span class="line">        &#125;</span><br></pre></td></tr></table></figure>
 <p>  修改完后，cd到go/src下运行sudo ./make.bash，稍等，搞定！</p>
 <p>  PS：得益于go变态的编译速度，强烈建议从源码安装go。</p>
 </li>
-<li><p>golang1.5修改方法<br>  解决variable declared but not used，通过修改go/src/cmd/compile/internal/gc/walk.go中的<code>func walk(fn *Node)</code>函数</p>
-  <figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> l := fn.Func.Dcl; l != <span class="constant">nil</span>; l = l.Next &#123;</span><br><span class="line">	<span class="keyword">if</span> l.N.Op != ONAME || l.N.Class&amp;^PHEAP != PAUTO || l.N.Sym.Name[<span class="number">0</span>] == <span class="string">'&amp;'</span> || l.N.Used &#123;</span><br><span class="line">		<span class="keyword">continue</span></span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">if</span> defn := l.N.Name.Defn; defn != <span class="constant">nil</span> &amp;&amp; defn.Op == OTYPESW &#123;</span><br><span class="line">		<span class="keyword">if</span> defn.Left.Used &#123;</span><br><span class="line">			<span class="keyword">continue</span></span><br><span class="line">		&#125;</span><br><span class="line">		lineno = defn.Left.Lineno</span><br><span class="line">		<span class="comment">//修改此行为下面这行 Yyerror("%v declared and not used", l.N.Sym)</span></span><br><span class="line">		Warn(<span class="string">"%v declared and not used"</span>, l.N.Sym)</span><br><span class="line">		defn.Left.Used = <span class="constant">true</span> <span class="comment">// suppress repeats</span></span><br><span class="line">	&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">		lineno = l.N.Lineno</span><br><span class="line">		<span class="comment">//修改此行为下面这行 Yyerror("%v declared and not used", l.N.Sym)</span></span><br><span class="line">		Warn(<span class="string">"%v declared and not used"</span>, l.N.Sym)</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>  解决package imported but not used，通过修改go/src/cmd/compile/internal/gc/lex.go中的<code>func mkpackage(pkgname string)</code>函数</p>
-  <figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> _, s := <span class="keyword">range</span> localpkg.Syms &#123;</span><br><span class="line">    <span class="keyword">if</span> s.Def == <span class="constant">nil</span> &#123;</span><br><span class="line">        <span class="keyword">continue</span></span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> s.Def.Op == OPACK &#123;</span><br><span class="line">        <span class="comment">// throw away top-level package name leftover</span></span><br><span class="line">        <span class="comment">// from previous file.</span></span><br><span class="line">        <span class="comment">// leave s-&gt;block set to cause redeclaration</span></span><br><span class="line">        <span class="comment">// errors if a conflicting top-level name is</span></span><br><span class="line">        <span class="comment">// introduced by a different file.</span></span><br><span class="line">        <span class="keyword">if</span> !s.Def.Used &amp;&amp; nsyntaxerrors == <span class="number">0</span> &#123;</span><br><span class="line">            <span class="comment">//修改此行为下面两行 pkgnotused(int(s.Def.Lineno), s.Def.Name.Pkg.Path, s.Name)</span></span><br><span class="line">            lineno = s.Def.Lineno</span><br><span class="line">            Warn(<span class="string">"imported and not used: %q"</span>, s.Def.Name.Pkg.Path)</span><br><span class="line"></span><br><span class="line">        &#125;</span><br><span class="line">        s.Def = <span class="constant">nil</span></span><br><span class="line">        <span class="keyword">continue</span></span><br><span class="line">    &#125;</span><br></pre></td></tr></table></figure>
-<p>  golang1.5编译需要golang1.4，设置好GOROOT_BOOTSTRAP环境变量为golang1.4所在目录，cd到golang1.5的源码（go/src）下运行sudo ./make.bash，稍等，搞定！</p>
+<li><p>golang1.5.1修改方法<br>  解决variable declared but not used，通过修改go/src/cmd/compile/internal/gc/walk.go中的<code>func walk(fn *Node)</code>函数，其实就是把这里的Yyerror改成Warn。</p>
+  <figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> l := fn.Func.Dcl; l != <span class="constant">nil</span>; l = l.Next &#123;</span><br><span class="line">	<span class="keyword">if</span> l.N.Op != ONAME || l.N.Class&amp;^PHEAP != PAUTO || l.N.Sym.Name[<span class="number">0</span>] == <span class="string">'&amp;'</span> || l.N.Used &#123;</span><br><span class="line">		<span class="keyword">continue</span></span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">if</span> defn := l.N.Name.Defn; defn != <span class="constant">nil</span> &amp;&amp; defn.Op == OTYPESW &#123;</span><br><span class="line">		<span class="keyword">if</span> defn.Left.Used &#123;</span><br><span class="line">			<span class="keyword">continue</span></span><br><span class="line">		&#125;</span><br><span class="line">		lineno = defn.Left.Lineno</span><br><span class="line">		<span class="comment">//修改此行为下面这行Yyerror("%v declared and not used", l.N.Sym)</span></span><br><span class="line">		Warn(<span class="string">"%v declared and not used"</span>, l.N.Sym)</span><br><span class="line">		defn.Left.Used = <span class="constant">true</span> <span class="comment">// suppress repeats</span></span><br><span class="line">	&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">		lineno = l.N.Lineno</span><br><span class="line">		<span class="comment">//修改此行为下面这行Yyerror("%v declared and not used", l.N.Sym)</span></span><br><span class="line">		Warn(<span class="string">"%v declared and not used"</span>, l.N.Sym)</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>  解决package imported but not used，通过修改go/src/cmd/compile/internal/gc/lex.go中的<code>func pkgnotused(lineno int, path string, name string)</code>函数，也就是将这里的yyerrorl改成Warnl。</p>
+  <figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">func</span> pkgnotused(lineno <span class="typename">int</span>, path <span class="typename">string</span>, name <span class="typename">string</span>) &#123;</span><br><span class="line">    <span class="comment">// ...这里省略掉注释</span></span><br><span class="line">	elem := path</span><br><span class="line">	<span class="keyword">if</span> i := strings.LastIndex(elem, <span class="string">"/"</span>); i &gt;= <span class="number">0</span> &#123;</span><br><span class="line">		elem = elem[i+<span class="number">1</span>:]</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">if</span> name == <span class="string">""</span> || elem == name &#123;</span><br><span class="line">		<span class="comment">//修改此行为下面一行yyerrorl(int(lineno), "imported and not used: %q", path)</span></span><br><span class="line">		Warnl(<span class="typename">int</span>(lineno), <span class="string">"imported and not used: %q"</span>, path)</span><br><span class="line">	&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">		<span class="comment">//修改此行为下面一行yyerrorl(int(lineno), "imported and not used: %q as %s", path, name)</span></span><br><span class="line">		Warnl(<span class="typename">int</span>(lineno), <span class="string">"imported and not used: %q as %s"</span>, path, name)</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>  编译golang1.5编译需要另一个golang1.4或更高版本的来编译，一个简单的方法是下载一份golang1.5.1的二进制版本，解压出两份来，如分别命名gomy,go15，按上面的方法修改gomy里面的代码后，设置好GOROOT_BOOTSTRAP环境变量为go15这个目录的绝对路径，cd到gomy/src下运行./make.bash，稍等，搞定！之后就可以把gomy放到你喜欢的位置，设置好GOROOT，GOPATH等环境亦是就可以使用了。</p>
 </li>
 </ul>
+<blockquote>
+<p>作者原创，转载请注明出处</p>
+</blockquote>
 ]]></content>
     <summary type="html">
-    <![CDATA[将go语言的变量，包未使用错误改成警告（更新至1.5版本的go编译器）]]>
+    <![CDATA[将go语言的变量，包未使用错误改成警告（更新至1.5.1版本的go编译器）]]>
     
     </summary>
     
@@ -60,7 +351,7 @@
     <link href="http://neverlee.github.io/post/hello-world/"/>
     <id>http://neverlee.github.io/post/hello-world/</id>
     <published>2015-06-21T03:41:27.000Z</published>
-    <updated>2015-08-04T09:16:16.981Z</updated>
+    <updated>2015-08-04T09:16:16.000Z</updated>
     <content type="html"><![CDATA[<h2 id="Welcome!">Welcome!</h2><p>Welcome to <a href="http://neverlee.github.io/">NeverLee</a>! This is my blog, it is base <a href="http://hexo.io/" target="_blank" rel="external">hexo</a>!, it’s theme is <a href="https://github.com/wuchong/jacman.git" target="_blank" rel="external">jacman</a>!<br>Please have a good time!</p>
 ]]></content>
     <summary type="html">
